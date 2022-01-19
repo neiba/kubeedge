@@ -12,6 +12,7 @@ import (
 	messagepkg "github.com/kubeedge/kubeedge/edge/pkg/common/message"
 	"github.com/kubeedge/kubeedge/edge/pkg/common/modules"
 	"github.com/kubeedge/kubeedge/edge/pkg/edgehub/clients"
+	"github.com/kubeedge/kubeedge/edge/pkg/edgehub/common/cacheutil"
 	"github.com/kubeedge/kubeedge/edge/pkg/edgehub/config"
 )
 
@@ -24,6 +25,11 @@ var groupMap = map[string]string{
 	"twin":     modules.TwinGroup,
 	"func":     modules.MetaGroup,
 	"user":     modules.BusGroup,
+}
+var edgeCache *cacheutil.EdgeCache
+
+func init() {
+	edgeCache = cacheutil.NewMetaCache()
 }
 
 func (eh *EdgeHub) initial() (err error) {
@@ -132,6 +138,62 @@ func (eh *EdgeHub) routeToCloud() {
 			return
 		}
 	}
+}
+func (eh *EdgeHub) cacheToCloud() error {
+	edgeCache.GetLock()
+	defer edgeCache.ReleaseLock()
+	klog.Infof("start sending cache to cloud")
+	cache := edgeCache.GetCache()
+	for edgeCache.GetIndexLength() > 0 {
+		name := edgeCache.GetFirstIndex()
+		err := eh.sendToCloud(*cache[name])
+		if err != nil {
+			return err
+		}
+		klog.Infof("successfully send cache %s to cloud", name)
+		edgeCache.ShiftIndex()
+		edgeCache.RemoveCache(name)
+	}
+	klog.Infof("finished sending cache to cloud")
+	return nil
+}
+func (eh *EdgeHub) disableCache() {
+	edgeCache.SetEnabled(false)
+}
+func (eh *EdgeHub) enableCache() {
+	if edgeCache.IsEnabled() {
+		return
+	}
+	edgeCache.SetEnabled(true)
+	klog.Infof("start caching on edge")
+	go func() {
+		for {
+			select {
+			case <-beehiveContext.Done():
+				klog.Warning("EdgeHub CacheOnEdge stop")
+				return
+			default:
+			}
+			if !edgeCache.IsEnabled() {
+				klog.Infof("stop caching on edge")
+				err := eh.cacheToCloud()
+				if err != nil {
+					klog.Warning("sending Cache to cloud failed: %v", err)
+				}
+				return
+			}
+			message, err := beehiveContext.Receive(ModuleNameEdgeHub)
+			if err != nil {
+				klog.Errorf("failed to receive message from edge: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			// save message to cache
+			edgeCache.SaveToCache(&message)
+
+		}
+	}()
 }
 
 func (eh *EdgeHub) keepalive() {
