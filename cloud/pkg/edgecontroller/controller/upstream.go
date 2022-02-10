@@ -36,6 +36,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	apimachineryType "k8s.io/apimachinery/pkg/types"
 	k8sinformer "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -56,6 +57,7 @@ import (
 	common "github.com/kubeedge/kubeedge/common/constants"
 	edgeapi "github.com/kubeedge/kubeedge/common/types"
 	"github.com/kubeedge/kubeedge/pkg/apis/componentconfig/cloudcore/v1alpha1"
+	"github.com/kubeedge/kubeedge/pkg/metaserver/util"
 )
 
 // SortedContainerStatuses define A type to help sort container statuses based on container names.
@@ -577,6 +579,9 @@ func kubeClientGet(uc *UpstreamController, namespace string, name string, queryT
 		err := stderrors.New("Wrong query type")
 		klog.Error(err)
 		return nil, err
+	}
+	if err == nil && obj != nil {
+		util.SetMetaType(obj.(runtime.Object))
 	}
 	return obj, err
 }
