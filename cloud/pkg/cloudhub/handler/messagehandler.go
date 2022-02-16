@@ -435,6 +435,7 @@ func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan Ex
 		if !model.IsToEdge(msg) {
 			klog.Infof("skip only to cloud event for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 			nodeQueue.Done(key)
+			nodeStore.Delete(msg)
 			continue
 		}
 		klog.V(4).Infof("event to send for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
@@ -470,6 +471,7 @@ func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan Ex
 
 		nodeQueue.Forget(key.(string))
 		nodeQueue.Done(key)
+		nodeStore.Delete(msg)
 	}
 }
 
