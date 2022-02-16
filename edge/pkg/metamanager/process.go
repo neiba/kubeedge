@@ -124,7 +124,7 @@ func (m *metaManager) processInsert(message model.Message) {
 		Key:   resKey,
 		Type:  resType,
 		Value: string(content)}
-	err = dao.SaveMeta(meta)
+	err = dao.InsertOrUpdate(meta)
 	if err != nil {
 		klog.Errorf("save meta failed, %s: %v", msgDebugInfo(&message), err)
 		feedbackError(err, "Error to save meta to DB", message)
