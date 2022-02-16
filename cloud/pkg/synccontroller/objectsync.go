@@ -82,6 +82,10 @@ func (sctl *SyncController) manageObject(sync *v1alpha1.ObjectSync) {
 			Group:    "",
 			Resource: sync.Spec.ObjectKind,
 		}, sync.Spec.ObjectName)
+		object = &unstructured.Unstructured{}
+		object.SetNamespace(sync.Namespace)
+		object.SetName(sync.Spec.ObjectName)
+		object.SetUID(types.UID(syncObjUID))
 	}
 
 	sendEvents(err, nodeName, sync, resourceType, object.GetResourceVersion(), object)
