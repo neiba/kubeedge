@@ -57,6 +57,7 @@ func UnsafeResourceToKind(r string) string {
 		"nodestatus":                   "NodeStatus",
 		"customresourcedefinitions":    "CustomResourceDefinition",
 		"customresourcedefinitionlist": "CustomResourceDefinitionList",
+		"configmaps":                   "ConfigMap",
 	}
 	if v, isUnusual := unusualResourceToKind[r]; isUnusual {
 		return v
@@ -138,7 +139,7 @@ func GetMessageAPIVerison(msg *beehiveModel.Message) string {
 func GetMessageResourceType(msg *beehiveModel.Message) string {
 	obj, ok := msg.Content.(runtime.Object)
 	if ok {
-		return UnsafeKindToResource(obj.GetObjectKind().GroupVersionKind().Kind)
+		return obj.GetObjectKind().GroupVersionKind().Kind
 	}
 	return ""
 }
