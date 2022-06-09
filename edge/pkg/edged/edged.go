@@ -1177,6 +1177,9 @@ func (e *edged) syncPod() {
 				resp := result.NewRespByMessage(&result, res)
 				beehiveContext.SendResp(*resp)
 			}
+		case "service", "endpoints", "namespace":
+			// edgemesh agent would request this resource from metaserver
+			continue
 		default:
 			klog.Errorf("resType is not pod or configmap or secret or volume: esType is %s", resType)
 			continue
@@ -1278,7 +1281,7 @@ func (e *edged) handlePod(op string, content []byte) (err error) {
 		return err
 	}
 
-	if filterPodByNodeName(&pod, e.nodeName) {
+	if filterPodByNodeName(&pod, e.nodeName) || op == model.DeleteOperation {
 		switch op {
 		case model.InsertOperation:
 			e.addPod(&pod)

@@ -58,6 +58,7 @@ func UnsafeResourceToKind(r string) string {
 		"customresourcedefinitions":    "CustomResourceDefinition",
 		"customresourcedefinitionlist": "CustomResourceDefinitionList",
 		"configmaps":                   "ConfigMap",
+		"namespaces":                   "Namespace",
 	}
 	if v, isUnusual := unusualResourceToKind[r]; isUnusual {
 		return v

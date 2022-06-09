@@ -103,31 +103,17 @@ func (q *ChannelMessageQueue) addMessageToQueue(nodeID string, msg *beehiveModel
 	//if the operation is delete, force to sync the resource message
 	//if the operation is response, force to sync the resource message, since the edgecore requests it
 	if !isDeleteMessage(msg) && msg.GetOperation() != beehiveModel.ResponseOperation {
-		item, exist, _ := nodeStore.GetByKey(messageKey)
-		// If the message doesn't exist in the store, then compare it with
-		// the version stored in the database
-		if !exist {
-			resourceNamespace, _ := edgemessagelayer.GetNamespace(*msg)
-			resourceUID, err := GetMessageUID(*msg)
-			if err != nil {
-				klog.Errorf("fail to get message UID for message: %s", msg.Header.ID)
-				return
-			}
-			objectSync, err := q.objectSyncLister.ObjectSyncs(resourceNamespace).Get(synccontroller.BuildObjectSyncName(nodeID, resourceUID))
-			if err == nil && objectSync.Status.ObjectResourceVersion != "" && synccontroller.CompareResourceVersion(msg.GetResourceVersion(), objectSync.Status.ObjectResourceVersion) <= 0 {
-				return
-			}
+		resourceNamespace, _ := edgemessagelayer.GetNamespace(*msg)
+		resourceUID, err := GetMessageUID(*msg)
+		if err != nil {
+			klog.Errorf("fail to get message UID for message: %s", msg.Header.ID)
+			return
 		}
-
-		// Check if message is older than already in store, if it is, discard it directly
-		if exist {
-			msgInStore := item.(*beehiveModel.Message)
-			if isDeleteMessage(msgInStore) || synccontroller.CompareResourceVersion(msg.GetResourceVersion(), msgInStore.GetResourceVersion()) <= 0 {
-				return
-			}
+		objectSync, err := q.objectSyncLister.ObjectSyncs(resourceNamespace).Get(synccontroller.BuildObjectSyncName(nodeID, resourceUID))
+		if err == nil && objectSync.Status.ObjectResourceVersion != "" && synccontroller.CompareResourceVersion(msg.GetResourceVersion(), objectSync.Status.ObjectResourceVersion) <= 0 {
+			return
 		}
 	}
-
 	if err := nodeStore.Add(msg); err != nil {
 		klog.Errorf("fail to add message %v nodeStore, err: %v", msg, err)
 		return
