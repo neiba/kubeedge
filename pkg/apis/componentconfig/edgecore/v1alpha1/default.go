@@ -83,6 +83,7 @@ func NewDefaultEdgeCoreConfig() *EdgeCoreConfig {
 				NetworkPluginMTU:            constants.DefaultNetworkPluginMTU,
 				VolumeStatsAggPeriod:        constants.DefaultVolumeStatsAggPeriod,
 				EnableMetrics:               true,
+				EnableAPIEvents:             false,
 			},
 			EdgeHub: &EdgeHub{
 				Enable:            true,

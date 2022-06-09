@@ -235,6 +235,9 @@ type Edged struct {
 	// EnableMetrics indicates whether enable the metrics
 	// default true
 	EnableMetrics bool `json:"enableMetrics,omitempty"`
+	// EnableAPIEvents indicates whether enable the kubernetes api event
+	// default false
+	EnableAPIEvents bool `json:"enableAPIEvents,omitempty"`
 }
 
 // EdgeHub indicates the EdgeHub module config

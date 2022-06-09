@@ -266,6 +266,9 @@ type EdgeControllerBuffer struct {
 	// ServiceAccount indicates the buffer of service account token
 	// default 1024
 	ServiceAccountToken int32 `json:"serviceAccountToken,omitempty"`
+	// CreateOrUpdateEvent indicates the buffer of create or udpate event
+	// default 1024
+	CreateOrUpdateEvent int32 `json:"createOrUpdateEvent,omitempty"`
 }
 
 // EdgeControllerLoad indicates the EdgeController load
@@ -312,6 +315,9 @@ type EdgeControllerLoad struct {
 	// ServiceAccountTokenWorkers indicates the load of service account token
 	// default 4
 	ServiceAccountTokenWorkers int32 `json:"ServiceAccountTokenWorkers,omitempty"`
+	// CreateOrUpdateEventWorkers indicates the load of create or update event
+	// default 4
+	CreateOrUpdateEventWorkers int32 `json:"createOrUpdateEventWorkers,omitempty"`
 }
 
 // DeviceController indicates the device controller

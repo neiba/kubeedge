@@ -108,6 +108,7 @@ const (
 	DefaultUpdateNodeBuffer                 = 1024
 	DefaultDeletePodBuffer                  = 1024
 	DefaultServiceAccountTokenBuffer        = 1024
+	DefaultCreateOrUpdateEventBuffer        = 1024
 
 	DefaultPodEventBuffer           = 1
 	DefaultConfigMapEventBuffer     = 1

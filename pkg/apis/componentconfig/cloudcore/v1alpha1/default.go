@@ -103,6 +103,7 @@ func NewDefaultCloudCoreConfig() *CloudCoreConfig {
 					UpdateNode:                 constants.DefaultUpdateNodeBuffer,
 					DeletePod:                  constants.DefaultDeletePodBuffer,
 					ServiceAccountToken:        constants.DefaultServiceAccountTokenBuffer,
+					CreateOrUpdateEvent:        constants.DefaultCreateOrUpdateEventBuffer,
 				},
 				Load: &EdgeControllerLoad{
 					UpdatePodStatusWorkers:            constants.DefaultUpdatePodStatusWorkers,

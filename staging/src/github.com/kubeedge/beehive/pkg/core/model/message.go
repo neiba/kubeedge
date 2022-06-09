@@ -31,6 +31,7 @@ const (
 	ResourceTypeRule                = "rule"
 	ResourceTypeRuleEndpoint        = "ruleendpoint"
 	ResourceTypeRuleStatus          = "rulestatus"
+	ResourceTypeEvent               = "event"
 )
 
 // Message struct

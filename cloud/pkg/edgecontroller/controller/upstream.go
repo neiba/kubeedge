@@ -110,6 +110,7 @@ type UpstreamController struct {
 	updateNodeChan            chan model.Message
 	podDeleteChan             chan model.Message
 	ruleStatusChan            chan model.Message
+	eventChan                 chan model.Message
 
 	// lister
 	podLister       corelisters.PodLister
@@ -161,6 +162,9 @@ func (uc *UpstreamController) Start() error {
 	}
 	for i := 0; i < int(uc.config.Load.UpdateRuleStatusWorkers); i++ {
 		go uc.updateRuleStatus()
+	}
+	for i := 0; i < int(uc.config.Load.CreateOrUpdateEventWorkers); i++ {
+		go uc.createOrUpdateEvent()
 	}
 	return nil
 }
@@ -224,6 +228,9 @@ func (uc *UpstreamController) dispatchMessage() {
 			}
 		case model.ResourceTypeRuleStatus:
 			uc.ruleStatusChan <- msg
+
+		case model.ResourceTypeEvent:
+			uc.eventChan <- msg
 
 		default:
 			klog.Errorf("message: %s, resource type: %s unsupported", msg.GetID(), resourceType)
@@ -878,6 +885,61 @@ func (uc *UpstreamController) queryNode() {
 	}
 }
 
+func (uc *UpstreamController) createOrUpdateEvent() {
+	for {
+		select {
+		case <-beehiveContext.Done():
+			klog.Warning("stop createOrUpdateEvent")
+			return
+		case msg := <-uc.eventChan:
+			content, err := msg.GetContentData()
+			if err != nil {
+				klog.Warningf("message: %s process failure, get content data failed with error: %s", msg.GetID(), err)
+				continue
+			}
+			event := &v1.Event{}
+			err = json.Unmarshal(content, event)
+			if err != nil {
+				klog.Warningf("message: %s process failure, unmarshal marshaled message content with error: %s", msg.GetID(), err)
+				continue
+			}
+			var result *v1.Event
+			switch msg.GetOperation() {
+			case model.InsertOperation:
+				result, err = uc.kubeClient.CoreV1().Events(event.Namespace).Create(context.Background(), event, metaV1.CreateOptions{})
+			case model.UpdateOperation:
+				result, err = uc.kubeClient.CoreV1().Events(event.Namespace).Update(context.Background(), event, metaV1.UpdateOptions{})
+			default:
+				klog.Errorf("message: %s, operation type for event: %s unsupported", msg.GetID(), msg.GetOperation())
+			}
+			if err != nil {
+				klog.Warningf("message: %s process failure, create or update event failed: %s", msg.GetID(), err)
+				continue
+			}
+			nodeID, err := messagelayer.GetNodeID(msg)
+			if err != nil {
+				klog.Warningf("message: %s process failure, get node id failed with error: %s", msg.GetID(), err)
+				continue
+			}
+			resource, err := messagelayer.BuildResource(nodeID, result.Namespace, "", result.Name)
+			if err != nil {
+				klog.Warningf("message: %s process failure, build message resource failed with error: %s", msg.GetID(), err)
+				continue
+			}
+			resMsg := model.NewMessage(msg.GetID()).
+				SetResourceVersion(event.GetResourceVersion()).
+				FillBody(result).
+				BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.ResponseOperation)
+			err = uc.messageLayer.Response(*resMsg)
+			if err != nil {
+				klog.Warningf("message: %s process failure, response failed with error: %s", msg.GetID(), err)
+				continue
+			}
+			klog.V(4).Infof("message: %s process successfully", msg.GetID())
+		}
+	}
+}
+
 func (uc *UpstreamController) unmarshalPodStatusMessage(msg model.Message) (ns string, podStatuses []edgeapi.PodStatusRequest) {
 	ns, err := messagelayer.GetNamespace(msg)
 	if err != nil {
@@ -1028,5 +1090,6 @@ func NewUpstreamController(config *v1alpha1.EdgeController, factory k8sinformer.
 	uc.updateNodeChan = make(chan model.Message, config.Buffer.UpdateNode)
 	uc.podDeleteChan = make(chan model.Message, config.Buffer.DeletePod)
 	uc.ruleStatusChan = make(chan model.Message, config.Buffer.UpdateNodeStatus)
+	uc.eventChan = make(chan model.Message, config.Buffer.CreateOrUpdateEvent)
 	return uc, nil
 }

@@ -47,6 +47,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	recordtools "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/flowcontrol"
@@ -54,6 +55,7 @@ import (
 	internalapi "k8s.io/cri-api/pkg/apis"
 	"k8s.io/klog/v2"
 	pluginwatcherapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	kubeletinternalconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 	"k8s.io/kubernetes/pkg/kubelet/cm"
@@ -322,7 +324,7 @@ func (e *edged) Start() {
 		e.mounter,
 		e.hostUtil,
 		e.getPodsDir(),
-		record.NewEventRecorder(),
+		e.recorder,
 		false,
 		false,
 		volumepathhandler.NewBlockVolumePathHandler(),
@@ -341,7 +343,7 @@ func (e *edged) Start() {
 		klog.Errorf("update node failed, error: %v", err)
 	}
 
-	e.probeManager = prober.NewManager(e.statusManager, e.livenessManager, e.readinessManager, e.startupManager, e.runner, record.NewEventRecorder())
+	e.probeManager = prober.NewManager(e.statusManager, e.livenessManager, e.readinessManager, e.startupManager, e.runner, e.recorder)
 	e.pleg = pleg.NewGenericPLEG(e.containerRuntime, plegChannelCapacity, plegRelistPeriod, e.podCache, clock.RealClock{})
 	e.statusManager.Start()
 	e.pleg.Start()
@@ -445,10 +447,25 @@ func newEdged(enable bool) (*edged, error) {
 		LowThresholdPercent:  int(edgedconfig.Config.ImageGCLowThreshold),
 		MinAge:               minAge,
 	}
-	// build new object to match interface
-	recorder := record.NewEventRecorder()
 
 	metaClient := client.New()
+	kubeClient := fakekube.NewSimpleClientset(metaClient)
+
+	var recorder recordtools.EventRecorder
+	if edgedconfig.Config.EnableAPIEvents {
+		eventBroadcaster := recordtools.NewBroadcaster()
+		recorder = eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "kubelet", Host: string(edgedconfig.Config.HostnameOverride)})
+		eventBroadcaster.StartLogging(klog.V(3).Infof)
+		if kubeClient != nil {
+			klog.V(4).Infof("Sending events to api server.")
+			eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+		} else {
+			klog.Warning("No api server defined - no events will be sent to API server.")
+		}
+	} else {
+		// build log event recorder to match interface
+		recorder = record.NewEventRecorder()
+	}
 
 	ed := &edged{
 		nodeName:                  edgedconfig.Config.HostnameOverride,
@@ -465,7 +482,7 @@ func newEdged(enable bool) (*edged, error) {
 		podDeletionQueue:          workqueue.New(),
 		podDeletionBackoff:        backoff,
 		metaClient:                metaClient,
-		kubeClient:                fakekube.NewSimpleClientset(metaClient),
+		kubeClient:                kubeClient,
 		nodeStatusUpdateFrequency: time.Duration(edgedconfig.Config.NodeStatusUpdateFrequency) * time.Second,
 		mounter:                   mount.New(""),
 		uid:                       types.UID("38796d14-1df3-11e8-8e5a-286ed488f209"),

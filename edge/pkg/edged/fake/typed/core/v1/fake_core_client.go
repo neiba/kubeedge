@@ -27,3 +27,7 @@ func (c *FakeCoreV1) PersistentVolumeClaims(namespace string) corev1.PersistentV
 func (c *FakeCoreV1) ConfigMaps(namespace string) corev1.ConfigMapInterface {
 	return &FakeConfigMap{fakecorev1.FakeConfigMaps{Fake: &c.FakeCoreV1}, namespace, c.MetaClient}
 }
+
+func (c *FakeCoreV1) Events(namespace string) corev1.EventInterface {
+	return &FakeEvent{fakecorev1.FakeEvents{Fake: &c.FakeCoreV1}, namespace, c.MetaClient}
+}
