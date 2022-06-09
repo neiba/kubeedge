@@ -47,13 +47,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
 	recordtools "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/client-go/util/workqueue"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	"k8s.io/klog/v2"
 	pluginwatcherapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	kubeletinternalconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 	"k8s.io/kubernetes/pkg/kubelet/cm"
@@ -116,6 +119,7 @@ import (
 	csiplugin "github.com/kubeedge/kubeedge/edge/pkg/edged/volume/csi"
 	"github.com/kubeedge/kubeedge/edge/pkg/metamanager"
 	"github.com/kubeedge/kubeedge/edge/pkg/metamanager/client"
+	metaserverconfig "github.com/kubeedge/kubeedge/edge/pkg/metamanager/metaserver/config"
 	"github.com/kubeedge/kubeedge/pkg/apis/componentconfig/edgecore/v1alpha1"
 	"github.com/kubeedge/kubeedge/pkg/version"
 )
@@ -322,7 +326,7 @@ func (e *edged) Start() {
 		e.mounter,
 		e.hostUtil,
 		e.getPodsDir(),
-		record.NewEventRecorder(),
+		e.recorder,
 		false,
 		false,
 		volumepathhandler.NewBlockVolumePathHandler(),
@@ -341,7 +345,7 @@ func (e *edged) Start() {
 		klog.Errorf("update node failed, error: %v", err)
 	}
 
-	e.probeManager = prober.NewManager(e.statusManager, e.livenessManager, e.readinessManager, e.startupManager, e.runner, record.NewEventRecorder())
+	e.probeManager = prober.NewManager(e.statusManager, e.livenessManager, e.readinessManager, e.startupManager, e.runner, e.recorder)
 	e.pleg = pleg.NewGenericPLEG(e.containerRuntime, plegChannelCapacity, plegRelistPeriod, e.podCache, clock.RealClock{})
 	e.statusManager.Start()
 	e.pleg.Start()
@@ -445,9 +449,22 @@ func newEdged(enable bool) (*edged, error) {
 		LowThresholdPercent:  int(edgedconfig.Config.ImageGCLowThreshold),
 		MinAge:               minAge,
 	}
-	// build new object to match interface
-	recorder := record.NewEventRecorder()
 
+	var recorder recordtools.EventRecorder
+	if edgedconfig.Config.EnableAPIEvents && metaserverconfig.Config.Enable {
+		config, _ := clientcmd.BuildConfigFromFlags("http://"+metaserverconfig.Config.Server, "")
+		config.QPS = float32(edgedconfig.Config.EventRecordQPS)
+		config.Burst = int(edgedconfig.Config.EventBurst)
+		eventClient, _ := clientset.NewForConfig(config)
+		eventBroadcaster := recordtools.NewBroadcaster()
+		recorder = eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "kubelet", Host: string(edgedconfig.Config.HostnameOverride)})
+		eventBroadcaster.StartLogging(klog.V(3).Infof)
+		klog.V(4).Infof("Sending events to api server.")
+		eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: eventClient.CoreV1().Events("")})
+	} else {
+		// build log event recorder to match interface
+		recorder = record.NewEventRecorder()
+	}
 	metaClient := client.New()
 
 	ed := &edged{

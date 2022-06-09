@@ -167,10 +167,10 @@ func environmentCheck() error {
 // registerModules register all the modules started in edgecore
 func registerModules(c *v1alpha1.EdgeCoreConfig) {
 	devicetwin.Register(c.Modules.DeviceTwin, c.Modules.Edged.HostnameOverride)
+	metamanager.Register(c.Modules.MetaManager)
 	edged.Register(c.Modules.Edged)
 	edgehub.Register(c.Modules.EdgeHub, c.Modules.Edged.HostnameOverride)
 	eventbus.Register(c.Modules.EventBus, c.Modules.Edged.HostnameOverride)
-	metamanager.Register(c.Modules.MetaManager)
 	servicebus.Register(c.Modules.ServiceBus)
 	edgestream.Register(c.Modules.EdgeStream, c.Modules.Edged.HostnameOverride, c.Modules.Edged.NodeIP)
 	test.Register(c.Modules.DBTest)

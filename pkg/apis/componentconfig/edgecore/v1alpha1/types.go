@@ -235,6 +235,18 @@ type Edged struct {
 	// EnableMetrics indicates whether enable the metrics
 	// default true
 	EnableMetrics bool `json:"enableMetrics,omitempty"`
+	// EnableAPIEvents indicates whether enable the kubernetes api event
+	// default false
+	EnableAPIEvents bool `json:"enableAPIEvents,omitempty"`
+	// EventRecordQPS is the maximum event creations per second. If 0, there
+	// is no limit enforced.
+	// default 5
+	EventRecordQPS int32 `json:"eventRecordQPS,omitempty"`
+	// EventBurst is the maximum size of a burst of event creations, temporarily
+	// allows event creations to burst to this number, while still not exceeding
+	// eventRecordQPS. Only used if eventRecordQPS > 0.
+	// default 10
+	EventBurst int32 `json:"eventBurst,omitempty"`
 }
 
 // EdgeHub indicates the EdgeHub module config
