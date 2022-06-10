@@ -6,6 +6,14 @@ FROM ${BUILD_FROM} AS builder
 ARG GO_LDFLAGS
 ARG QEMU_ARCH=x86_64
 
+ARG PROXY
+
+ENV https_proxy=${PROXY}
+ENV http_proxy=${PROXY}
+ENV HTTPS_PROXY=${PROXY}
+ENV HTTP_PROXY=${PROXY}
+ENV GOPROXY="https://goproxy.io,direct"
+
 COPY ./build/edge/tmp/qemu-${QEMU_ARCH}-static /usr/bin/
 COPY . /go/src/github.com/kubeedge/kubeedge
 
