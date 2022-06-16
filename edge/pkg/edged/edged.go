@@ -1177,7 +1177,7 @@ func (e *edged) syncPod() {
 				resp := result.NewRespByMessage(&result, res)
 				beehiveContext.SendResp(*resp)
 			}
-		case "service", "endpoints", "namespace":
+		case "service", "endpoints", "namespace", "destinationrule", "gateway", "virtualservice":
 			// edgemesh agent would request this resource from metaserver
 			continue
 		default:
