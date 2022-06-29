@@ -1,6 +1,7 @@
 FROM golang:1.14-alpine3.11 AS builder
 
 ARG GO_LDFLAGS
+ENV GOPROXY="https://goproxy.io,direct"
 
 COPY . /go/src/github.com/kubeedge/kubeedge
 

@@ -373,7 +373,7 @@ func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe cha
 
 		obj, exist, _ := nodeListStore.GetByKey(key.(string))
 		if !exist {
-			klog.Errorf("nodeListStore for node %s doesn't exist", info.NodeID)
+			klog.Errorf("message with key %s doesn't exist", key.(string))
 			continue
 		}
 		msg := obj.(*beehiveModel.Message)
@@ -426,7 +426,7 @@ func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan Ex
 
 		obj, exist, _ := nodeStore.GetByKey(key.(string))
 		if !exist {
-			klog.Errorf("nodeStore for node %s doesn't exist", info.NodeID)
+			klog.Errorf("message with key %s doesn't exist", key.(string))
 			nodeQueue.Done(key)
 			continue
 		}
@@ -435,7 +435,6 @@ func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan Ex
 		if !model.IsToEdge(msg) {
 			klog.Infof("skip only to cloud event for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 			nodeQueue.Done(key)
-			nodeStore.Delete(msg)
 			continue
 		}
 		klog.V(4).Infof("event to send for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
@@ -471,7 +470,6 @@ func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan Ex
 
 		nodeQueue.Forget(key.(string))
 		nodeQueue.Done(key)
-		nodeStore.Delete(msg)
 	}
 }
 

@@ -282,6 +282,7 @@ edgeimage:
 	--build-arg GO_LDFLAGS=${GO_LDFLAGS} \
 	--build-arg BUILD_FROM=${ARCH}/golang:1.14-alpine3.11 \
 	--build-arg RUN_FROM=${ARCH}/docker:dind \
+	--build-arg PROXY=${PROXY} \
 	-f build/edge/Dockerfile .
 
 .PHONY: edgesite-server-image

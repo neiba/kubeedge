@@ -58,6 +58,10 @@ func UnsafeResourceToKind(r string) string {
 		"customresourcedefinitions":    "CustomResourceDefinition",
 		"customresourcedefinitionlist": "CustomResourceDefinitionList",
 		"configmaps":                   "ConfigMap",
+		"namespaces":                   "Namespace",
+		"destinationrules":             "DestinationRule",
+		"gateways":                     "Gateway",
+		"virtualservices":              "VirtualService",
 	}
 	if v, isUnusual := unusualResourceToKind[r]; isUnusual {
 		return v
@@ -84,6 +88,9 @@ func UnsafeKindToResource(k string) string {
 		"NodeStatus":                   "nodestatus",
 		"CustomResourceDefinition":     "customresourcedefinitions",
 		"CustomResourceDefinitionList": "customresourcedefinitionlist",
+		"DestinationRule":              "destinationrules",
+		"Gateway":                      "gateways",
+		"VirtualService":               "virtualservices",
 	}
 	if v, isUnusual := unusualKindToResource[k]; isUnusual {
 		return v
