@@ -140,4 +140,10 @@ const (
 	// ServerPort is the default port for the edgecore server on each host machine.
 	// May be overridden by a flag at startup in the future.
 	ServerPort = 10350
+
+	// MessageSuccessfulContent is the successful content value of Message struct
+	MessageSuccessfulContent string = "OK"
+
+	// MaxRespBodyLength is the max length of http response body
+	MaxRespBodyLength = 1 << 20 // 1 MiB
 )
