@@ -374,6 +374,8 @@ func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe cha
 		obj, exist, _ := nodeListStore.GetByKey(key.(string))
 		if !exist {
 			klog.Errorf("message with key %s doesn't exist", key.(string))
+			nodeListQueue.Forget(key.(string))
+			nodeListQueue.Done(key)
 			continue
 		}
 		msg := obj.(*beehiveModel.Message)
@@ -385,21 +387,22 @@ func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe cha
 			stopServe <- nodeStop
 			return
 		}
-		if !model.IsToEdge(msg) {
+
+		if model.IsToEdge(msg) {
+			klog.V(4).Infof("event to send for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
+
+			trimMessage(msg)
+
+			conn, ok := mh.nodeConns.Load(info.NodeID)
+			if ok {
+				if err := mh.send(conn.(hubio.CloudHubIO), info, msg); err != nil {
+					klog.Errorf("failed to send to cloudhub, err: %v", err)
+				}
+			} else {
+				klog.Infof("connection not found, skip event for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
+			}
+		} else {
 			klog.Infof("skip only to cloud event for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
-			continue
-		}
-		klog.V(4).Infof("event to send for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
-
-		trimMessage(msg)
-
-		conn, ok := mh.nodeConns.Load(info.NodeID)
-		if !ok {
-			continue
-		}
-
-		if err := mh.send(conn.(hubio.CloudHubIO), info, msg); err != nil {
-			klog.Errorf("failed to send to cloudhub, err: %v", err)
 		}
 
 		// delete successfully sent events from the queue/store
