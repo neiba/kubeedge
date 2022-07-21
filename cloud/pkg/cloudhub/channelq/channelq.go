@@ -264,7 +264,7 @@ func (q *ChannelMessageQueue) Close(info *model.HubInfo) {
 func (q *ChannelMessageQueue) Publish(msg *beehiveModel.Message) error {
 	switch msg.Router.Source {
 	case application.MetaServerSource:
-		beehiveContext.Send(modules.DynamicControllerModuleName, *msg)
+		beehiveContext.SendToGroup(modules.DynamicControllerModuleGroup, *msg)
 	case model.ResTwin:
 		beehiveContext.SendToGroup(model.SrcDeviceController, *msg)
 	default:

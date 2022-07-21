@@ -18,6 +18,7 @@ package application
 
 import (
 	"fmt"
+	"sync"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -44,6 +45,8 @@ type handlerCenter struct {
 	handlers                     map[schema.GroupVersionResource]*CommonResourceEventHandler
 	dynamicSharedInformerFactory dynamicinformer.DynamicSharedInformerFactory
 	messageLayer                 messagelayer.MessageLayer
+
+	rw sync.RWMutex
 }
 
 func NewHandlerCenter(informerFactory dynamicinformer.DynamicSharedInformerFactory) HandlerCenter {
@@ -59,12 +62,21 @@ func NewHandlerCenter(informerFactory dynamicinformer.DynamicSharedInformerFacto
 
 func (c *handlerCenter) ForResource(gvr schema.GroupVersionResource) *CommonResourceEventHandler {
 	var handler *CommonResourceEventHandler
+	c.rw.RLock()
 	if store, ok := c.handlers[gvr]; ok {
 		handler = store
+		c.rw.RUnlock()
 	} else {
-		klog.Infof("[metaserver/HandlerCenter] prepare a new resourceEventHandler(%v)", gvr)
-		handler = NewCommonResourceEventHandler(gvr, c.dynamicSharedInformerFactory, c.messageLayer)
-		c.handlers[gvr] = handler
+		c.rw.RUnlock()
+		c.rw.Lock()
+		if store, ok := c.handlers[gvr]; ok {
+			handler = store
+		} else {
+			klog.Infof("[metaserver/HandlerCenter] prepare a new resourceEventHandler(%v)", gvr)
+			handler = NewCommonResourceEventHandler(gvr, c.dynamicSharedInformerFactory, c.messageLayer)
+			c.handlers[gvr] = handler
+		}
+		c.rw.Unlock()
 	}
 	return handler
 }
@@ -86,6 +98,9 @@ type CommonResourceEventHandler struct {
 	messageLayer messagelayer.MessageLayer
 	gvr          schema.GroupVersionResource
 	informer     informers.GenericInformer
+
+	// mux for listeners
+	mux sync.Mutex
 }
 
 func NewCommonResourceEventHandler(gvr schema.GroupVersionResource, informerFactory dynamicinformer.DynamicSharedInformerFactory, layer messagelayer.MessageLayer) *CommonResourceEventHandler {
@@ -94,6 +109,7 @@ func NewCommonResourceEventHandler(gvr schema.GroupVersionResource, informerFact
 		listeners:    make(map[string]*SelectorListener),
 		messageLayer: layer,
 		gvr:          gvr,
+		mux:          sync.Mutex{},
 	}
 
 	klog.Infof("[metaserver/resourceEventHandler] handler(%v) init, prepare informer...", gvr)
@@ -144,20 +160,26 @@ func (c *CommonResourceEventHandler) AddListener(s *SelectorListener) error {
 		return fmt.Errorf("failed to list: %v", err)
 	}
 	s.sendAllObjects(ret, c.messageLayer)
+	c.mux.Lock()
 	c.listeners[s.id] = s
+	c.mux.Unlock()
 	return nil
 }
 
 func (c *CommonResourceEventHandler) DeleteListener(s *SelectorListener) {
+	c.mux.Lock()
 	delete(c.listeners, s.id)
+	c.mux.Unlock()
 }
 
 func (c *CommonResourceEventHandler) dispatchEvents() {
 	for event := range c.events {
 		klog.V(4).Infof("[metaserver/resourceEventHandler] handler(%v), send obj event{%v/%v} to listeners", c.gvr, event.Type, event.Object.GetObjectKind().GroupVersionKind().String())
+		c.mux.Lock()
 		for _, listener := range c.listeners {
 			listener.sendObj(event, c.messageLayer)
 		}
+		c.mux.Unlock()
 	}
 	klog.Warningf("[metaserver/resourceEventHandler] handler(%v) stopped!", c.gvr.String())
 }
