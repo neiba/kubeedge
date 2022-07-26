@@ -6,6 +6,8 @@ import (
 	"k8s.io/component-base/logs"
 
 	"github.com/kubeedge/kubeedge/cloud/cmd/cloudcore/app"
+
+	_ "net/http/pprof"
 )
 
 func main() {

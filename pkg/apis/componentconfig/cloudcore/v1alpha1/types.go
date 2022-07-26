@@ -133,6 +133,9 @@ type CloudHub struct {
 	// TokenRefreshDuration indicates the interval of cloudcore token refresh, unit is hour
 	// default 12h
 	TokenRefreshDuration time.Duration `json:"tokenRefreshDuration,omitempty"`
+	// enableProfiling enables profiling via web interface host:port/debug/pprof/
+	// default false
+	EnableProfiling bool `json:"enableProfiling,omitempty"`
 }
 
 // CloudHubQUIC indicates the quic server config
