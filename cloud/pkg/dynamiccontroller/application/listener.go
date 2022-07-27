@@ -14,6 +14,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
 	"github.com/kubeedge/kubeedge/cloud/pkg/dynamiccontroller/messagelayer"
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/constants"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	v2 "github.com/kubeedge/kubeedge/edge/pkg/metamanager/dao/v2"
 	"github.com/kubeedge/kubeedge/pkg/metaserver/util"
 )
@@ -82,6 +83,7 @@ func (l *SelectorListener) sendObj(event watch.Event, messageLayer messagelayer.
 		SetResourceVersion(accessor.GetResourceVersion()).
 		BuildRouter(modules.DynamicControllerModuleName, constants.GroupResource, resource, operation).
 		FillBody(event.Object)
+	metrics.RecordCloudHubBuildMessageTime(msg)
 
 	if err := messageLayer.Send(*msg); err != nil {
 		klog.Warningf("send message failed with error: %s, operation: %s, resource: %s", err, msg.GetOperation(), msg.GetResource())

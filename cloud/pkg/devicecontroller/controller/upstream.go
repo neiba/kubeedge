@@ -33,6 +33,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/constants"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/messagelayer"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/types"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 )
 
 // DeviceStatus is structure to patch device status
@@ -82,6 +83,7 @@ func (uc *UpstreamController) dispatchMessage() {
 		msg, err := uc.messageLayer.Receive()
 		if err != nil {
 			klog.Warningf("Receive message failed, %s", err)
+			metrics.RecordCloudcoreMessageHandleDuration(&msg)
 			continue
 		}
 
@@ -90,6 +92,7 @@ func (uc *UpstreamController) dispatchMessage() {
 		resourceType, err := messagelayer.GetResourceType(msg.GetResource())
 		if err != nil {
 			klog.Warningf("Parse message: %s resource type with error: %s", msg.GetID(), err)
+			metrics.RecordCloudcoreMessageHandleDuration(&msg)
 			continue
 		}
 		klog.Infof("Message: %s, resource type is: %s", msg.GetID(), resourceType)
@@ -99,18 +102,24 @@ func (uc *UpstreamController) dispatchMessage() {
 			uc.deviceStatusChan <- msg
 		case constants.ResourceTypeMembershipDetail:
 		default:
+			metrics.RecordCloudcoreMessageHandleDuration(&msg)
 			klog.Warningf("Message: %s, with resource type: %s not intended for device controller", msg.GetID(), resourceType)
 		}
 	}
 }
 
 func (uc *UpstreamController) updateDeviceStatus() {
+	var oldmsg *model.Message
 	for {
+		if oldmsg != nil {
+			metrics.RecordCloudcoreMessageHandleDuration(oldmsg)
+		}
 		select {
 		case <-beehiveContext.Done():
 			klog.Info("Stop updateDeviceStatus")
 			return
 		case msg := <-uc.deviceStatusChan:
+			oldmsg = &msg
 			klog.Infof("Message: %s, operation is: %s, and resource is: %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
 			msgTwin, err := uc.unmarshalDeviceStatusMessage(msg)
 			if err != nil {

@@ -23,6 +23,7 @@ func StartModules() {
 		go module.Start()
 		klog.Infof("Starting module %v", name)
 	}
+	beehiveContext.StartMetrics()
 }
 
 // GracefulShutdown is if it gets the special signals it does modules cleanup

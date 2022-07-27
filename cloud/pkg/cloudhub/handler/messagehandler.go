@@ -28,6 +28,7 @@ import (
 	deviceconst "github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/constants"
 	edgeconst "github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/constants"
 	edgemessagelayer "github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/messagelayer"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	"github.com/kubeedge/kubeedge/cloud/pkg/synccontroller"
 	"github.com/kubeedge/kubeedge/common/constants"
 	"github.com/kubeedge/kubeedge/pkg/metaserver/util"
@@ -116,6 +117,8 @@ func (mh *MessageHandle) HandleServer(container *mux.MessageContainer, writer mu
 		return
 	}
 
+	metrics.RecordCloudHubReceiveMessage(nodeID, container.Message)
+
 	klog.V(4).Infof("[cloudhub/HandlerServer] get msg from edge(%v): %+v", nodeID, container.Message)
 	if container.Message.GetOperation() == model.OpKeepalive {
 		klog.V(4).Infof("Keepalive message received from node: %s", nodeID)
@@ -143,9 +146,11 @@ func (mh *MessageHandle) HandleServer(container *mux.MessageContainer, writer mu
 		}
 		return
 	} else if container.Message.GetOperation() == "upload" && container.Message.GetGroup() == modules.UserGroup {
+		metrics.RecordCloudHubReceiveMessageTime(container.Message)
 		container.Message.Router.Resource = fmt.Sprintf("node/%s/%s", nodeID, container.Message.Router.Resource)
 		beehiveContext.Send(modules.RouterModuleName, *container.Message)
 	} else {
+		metrics.RecordCloudHubReceiveMessageTime(container.Message)
 		err := mh.PubToController(&model.HubInfo{ProjectID: projectID, NodeID: nodeID}, container.Message)
 		if err != nil {
 			// if err, we should stop node, write data to edgehub, stop nodify
@@ -398,6 +403,8 @@ func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe cha
 				if err := mh.send(conn.(hubio.CloudHubIO), info, msg); err != nil {
 					klog.Errorf("failed to send to cloudhub, err: %v", err)
 				}
+				metrics.RecordCloudHubTransmitMessage(info.NodeID, msg)
+				metrics.RecordCloudcoreSendMessageDuration(msg)
 			} else {
 				klog.Infof("connection not found, skip event for node %s, %s, content %s", info.NodeID, dumpMessageMetadata(msg), msg.Content)
 			}
@@ -509,6 +516,8 @@ LOOP:
 			ticker.Reset(time.Second * retryInterval)
 		}
 	}
+	metrics.RecordCloudHubTransmitMessage(info.NodeID, msg)
+	metrics.RecordCloudcoreSendMessageDuration(msg)
 	return nil
 }
 

@@ -53,6 +53,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/constants"
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/messagelayer"
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/types"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	routerrule "github.com/kubeedge/kubeedge/cloud/pkg/router/rule"
 	common "github.com/kubeedge/kubeedge/common/constants"
 	edgeapi "github.com/kubeedge/kubeedge/common/types"
@@ -177,6 +178,7 @@ func (uc *UpstreamController) dispatchMessage() {
 		msg, err := uc.messageLayer.Receive()
 		if err != nil {
 			klog.Warningf("receive message failed, %s", err)
+			metrics.RecordCloudcoreMessageHandleDuration(&msg)
 			continue
 		}
 
@@ -186,6 +188,7 @@ func (uc *UpstreamController) dispatchMessage() {
 		resourceType, err := messagelayer.GetResourceType(msg)
 		if err != nil {
 			klog.Warningf("parse message: %s resource type with error: %s", msg.GetID(), err)
+			metrics.RecordCloudcoreMessageHandleDuration(&msg)
 			continue
 		}
 
@@ -215,24 +218,31 @@ func (uc *UpstreamController) dispatchMessage() {
 			case model.UpdateOperation:
 				uc.updateNodeChan <- msg
 			default:
+				metrics.RecordCloudcoreMessageHandleDuration(&msg)
 				klog.Errorf("message: %s, operation type: %s unsupported", msg.GetID(), msg.GetOperation())
 			}
 		case model.ResourceTypePod:
 			if msg.GetOperation() == model.DeleteOperation {
 				uc.podDeleteChan <- msg
 			} else {
+				metrics.RecordCloudcoreMessageHandleDuration(&msg)
 				klog.Errorf("message: %s, operation type: %s unsupported", msg.GetID(), msg.GetOperation())
 			}
 		case model.ResourceTypeRuleStatus:
 			uc.ruleStatusChan <- msg
 
 		default:
+			metrics.RecordCloudcoreMessageHandleDuration(&msg)
 			klog.Errorf("message: %s, resource type: %s unsupported", msg.GetID(), resourceType)
 		}
 	}
 }
 func (uc *UpstreamController) updateRuleStatus() {
+	var oldmsg *model.Message
 	for {
+		if oldmsg != nil {
+			metrics.RecordCloudcoreMessageHandleDuration(oldmsg)
+		}
 		select {
 		case <-beehiveContext.Done():
 			klog.Warning("stop updateRuleStatus")
@@ -285,12 +295,18 @@ func (uc *UpstreamController) updateRuleStatus() {
 	}
 }
 func (uc *UpstreamController) updatePodStatus() {
+	var oldmsg *model.Message
 	for {
+		if oldmsg != nil {
+			metrics.RecordCloudcoreMessageHandleDuration(oldmsg)
+		}
 		select {
 		case <-beehiveContext.Done():
 			klog.Warning("stop updatePodStatus")
 			return
 		case msg := <-uc.podStatusChan:
+			oldmsg = &msg
+
 			klog.V(5).Infof("message: %s, operation is: %s, and resource is: %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
 
 			namespace, podStatuses := uc.unmarshalPodStatusMessage(msg)
@@ -398,12 +414,18 @@ func (uc *UpstreamController) createNode(name string, node *v1.Node) (*v1.Node, 
 }
 
 func (uc *UpstreamController) updateNodeStatus() {
+	var oldmsg *model.Message
 	for {
+		if oldmsg != nil {
+			metrics.RecordCloudcoreMessageHandleDuration(oldmsg)
+		}
 		select {
 		case <-beehiveContext.Done():
 			klog.Warning("stop updateNodeStatus")
 			return
 		case msg := <-uc.nodeStatusChan:
+			oldmsg = &msg
+
 			klog.V(5).Infof("message: %s, operation is: %s, and resource is %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
 
 			data, err := msg.GetContentData()
@@ -587,6 +609,8 @@ func kubeClientGet(uc *UpstreamController, namespace string, name string, queryT
 }
 
 func queryInner(uc *UpstreamController, msg model.Message, queryType string) {
+	defer metrics.RecordCloudcoreMessageHandleDuration(&msg)
+
 	klog.V(4).Infof("message: %s, operation is: %s, and resource is: %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
 	namespace, err := messagelayer.GetNamespace(msg)
 	if err != nil {
@@ -732,12 +756,18 @@ func (uc *UpstreamController) queryVolumeAttachment() {
 }
 
 func (uc *UpstreamController) updateNode() {
+	var oldmsg *model.Message
 	for {
+		if oldmsg != nil {
+			metrics.RecordCloudcoreMessageHandleDuration(oldmsg)
+		}
 		select {
 		case <-beehiveContext.Done():
 			klog.Warning("stop updateNode")
 			return
 		case msg := <-uc.updateNodeChan:
+			oldmsg = &msg
+
 			klog.V(5).Infof("message: %s, operation is: %s, and resource is %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
 			noderequest := &v1.Node{}
 
@@ -832,7 +862,11 @@ func (uc *UpstreamController) updateNode() {
 }
 
 func (uc *UpstreamController) deletePod() {
+	var oldmsg *model.Message
 	for {
+		if oldmsg != nil {
+			metrics.RecordCloudcoreMessageHandleDuration(oldmsg)
+		}
 		select {
 		case <-beehiveContext.Done():
 			klog.Warning("stop deletePod")

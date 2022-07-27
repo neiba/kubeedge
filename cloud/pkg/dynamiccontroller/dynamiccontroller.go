@@ -27,6 +27,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/dynamiccontroller/application"
 	"github.com/kubeedge/kubeedge/cloud/pkg/dynamiccontroller/config"
 	"github.com/kubeedge/kubeedge/cloud/pkg/dynamiccontroller/messagelayer"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	configv1alpha1 "github.com/kubeedge/kubeedge/pkg/apis/componentconfig/cloudcore/v1alpha1"
 )
 
@@ -92,8 +93,10 @@ func (dctl *DynamicController) receiveMessage() {
 		msg, err := dctl.messageLayer.Receive()
 		if err != nil {
 			klog.Warningf("receive message failed, %s", err)
+			metrics.RecordCloudcoreMessageHandleDuration(&msg)
 			continue
 		}
 		go dctl.applicationCenter.Process(msg)
+		metrics.RecordCloudcoreMessageHandleDuration(&msg)
 	}
 }

@@ -42,6 +42,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/manager"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/messagelayer"
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/types"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 )
 
 // Constants for protocol, datatype, configmap, deviceProfile
@@ -393,6 +394,7 @@ func (dc *DownstreamController) deviceAdded(device *v1alpha2.Device) {
 		dc.addToConfigMap(device)
 		edgeDevice := createDevice(device)
 		msg := model.NewMessage("")
+		metrics.RecordCloudHubBuildMessageTime(msg)
 
 		resource, err := messagelayer.BuildResource(device.Spec.NodeSelector.NodeSelectorTerms[0].MatchExpressions[0].Values[0], "membership", "")
 		if err != nil {
@@ -628,6 +630,7 @@ func (dc *DownstreamController) deviceUpdated(device *v1alpha2.Device) {
 					addUpdatedTwins(device.Status.Twins, twin, device.ResourceVersion)
 					addDeletedTwins(cachedDevice.Status.Twins, device.Status.Twins, twin, device.ResourceVersion)
 					msg := model.NewMessage("")
+					metrics.RecordCloudHubBuildMessageTime(msg)
 
 					resource, err := messagelayer.BuildResource(device.Spec.NodeSelector.NodeSelectorTerms[0].MatchExpressions[0].Values[0], "device/"+device.Name+"/twin/cloud_updated", "")
 					if err != nil {
@@ -846,6 +849,7 @@ func (dc *DownstreamController) deviceDeleted(device *v1alpha2.Device) {
 	dc.deleteFromConfigMap(device)
 	edgeDevice := createDevice(device)
 	msg := model.NewMessage("")
+	metrics.RecordCloudHubBuildMessageTime(msg)
 
 	if len(device.Spec.NodeSelector.NodeSelectorTerms) != 0 && len(device.Spec.NodeSelector.NodeSelectorTerms[0].MatchExpressions) != 0 && len(device.Spec.NodeSelector.NodeSelectorTerms[0].MatchExpressions[0].Values) != 0 {
 		resource, err := messagelayer.BuildResource(device.Spec.NodeSelector.NodeSelectorTerms[0].MatchExpressions[0].Values[0], "membership", "")

@@ -26,6 +26,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/client"
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
 	"github.com/kubeedge/kubeedge/cloud/pkg/dynamiccontroller/messagelayer"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	"github.com/kubeedge/kubeedge/edge/pkg/common/message"
 	"github.com/kubeedge/kubeedge/edge/pkg/edgehub"
 	metaserverconfig "github.com/kubeedge/kubeedge/edge/pkg/metamanager/metaserver/config"
@@ -546,6 +547,7 @@ func (c *Center) Response(app *Application, parentID string, status applicationS
 	msg := model.NewMessage(parentID).
 		BuildRouter(modules.DynamicControllerModuleName, message.ResourceGroupName, resource, ApplicationResp).
 		FillBody(app)
+	metrics.RecordCloudHubBuildMessageTime(msg)
 
 	if err := c.messageLayer.Response(*msg); err != nil {
 		klog.Warningf("send message failed with error: %s, operation: %s, resource: %s", err, msg.GetOperation(), msg.GetResource())

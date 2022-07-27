@@ -11,6 +11,7 @@ import (
 
 	beehiveContext "github.com/kubeedge/beehive/pkg/core/context"
 	"github.com/kubeedge/beehive/pkg/core/model"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 )
 
 var MessageHandlerInstance = &MessageHandler{}
@@ -93,6 +94,7 @@ func (mh *MessageHandler) HandleMessage(message *model.Message) error {
 				klog.Errorf("close response occur error, msgID: %s, reason: %s", message.GetID(), err.Error())
 			}
 		}
+		metrics.RecordCloudcoreMessageHandleDuration(message)
 	}(message)
 
 	return nil

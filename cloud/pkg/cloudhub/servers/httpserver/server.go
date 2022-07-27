@@ -37,6 +37,7 @@ import (
 	hubconfig "github.com/kubeedge/kubeedge/cloud/pkg/cloudhub/config"
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
 	"github.com/kubeedge/kubeedge/common/constants"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // StartHTTPServer starts the http service
@@ -48,6 +49,7 @@ func StartHTTPServer() {
 	if hubconfig.Config.EnableProfiling {
 		router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux)
 	}
+	router.Handle("/metrics", promhttp.Handler())
 
 	addr := fmt.Sprintf("%s:%d", hubconfig.Config.HTTPS.Address, hubconfig.Config.HTTPS.Port)
 

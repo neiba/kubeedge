@@ -65,6 +65,8 @@ func (a *cloudHub) Start() {
 		os.Exit(1)
 	}
 
+	go a.messageq.StartMetrics()
+
 	// start dispatch message from the cloud to edge node
 	go a.messageq.DispatchMessage()
 

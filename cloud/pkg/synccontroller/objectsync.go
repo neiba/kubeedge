@@ -21,6 +21,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
 	edgectrconst "github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/constants"
 	edgectrmessagelayer "github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/messagelayer"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	commonconst "github.com/kubeedge/kubeedge/common/constants"
 	"github.com/kubeedge/kubeedge/pkg/metaserver/util"
 )
@@ -129,6 +130,7 @@ func buildEdgeControllerMessage(nodeName, namespace, resourceType, resourceName,
 		BuildRouter(modules.EdgeControllerModuleName, edgectrconst.GroupResource, resource, operationType).
 		FillBody(obj).
 		SetResourceVersion(resourceVersion)
+	metrics.RecordCloudHubBuildMessageTime(msg)
 
 	return msg
 }

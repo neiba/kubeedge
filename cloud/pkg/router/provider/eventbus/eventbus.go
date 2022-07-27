@@ -11,6 +11,7 @@ import (
 	"github.com/kubeedge/beehive/pkg/core/model"
 	v1 "github.com/kubeedge/kubeedge/cloud/pkg/apis/rules/v1"
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	"github.com/kubeedge/kubeedge/cloud/pkg/router/constants"
 	"github.com/kubeedge/kubeedge/cloud/pkg/router/listener"
 	"github.com/kubeedge/kubeedge/cloud/pkg/router/provider"
@@ -121,6 +122,7 @@ func (eb *EventBus) GoToTarget(data map[string]interface{}, stop chan struct{}) 
 		return nil, err
 	}
 	msg := model.NewMessage("")
+	metrics.RecordCloudHubBuildMessageTime(msg)
 	msg.BuildHeader(messageID, "", msg.GetTimestamp())
 	resource := "node/" + nodeName + "/"
 	if !ok || param == "" {

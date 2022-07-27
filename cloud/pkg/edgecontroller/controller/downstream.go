@@ -22,6 +22,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/constants"
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/manager"
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/messagelayer"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	"github.com/kubeedge/kubeedge/pkg/apis/componentconfig/cloudcore/v1alpha1"
 )
 
@@ -71,6 +72,7 @@ func (dc *DownstreamController) syncPod() {
 			msg := model.NewMessage("").
 				SetResourceVersion(pod.ResourceVersion).
 				FillBody(pod)
+			metrics.RecordCloudHubBuildMessageTime(msg)
 			switch e.Type {
 			case watch.Added:
 				msg.BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.InsertOperation)
@@ -134,6 +136,7 @@ func (dc *DownstreamController) syncConfigMap() {
 					SetResourceVersion(configMap.ResourceVersion).
 					BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, operation).
 					FillBody(configMap)
+				metrics.RecordCloudHubBuildMessageTime(msg)
 				err = dc.messageLayer.Send(*msg)
 				if err != nil {
 					klog.Warningf("send message failed with error: %s, operation: %s, resource: %s", err, msg.GetOperation(), msg.GetResource())
@@ -187,6 +190,7 @@ func (dc *DownstreamController) syncSecret() {
 					SetResourceVersion(secret.ResourceVersion).
 					BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, operation).
 					FillBody(secret)
+				metrics.RecordCloudHubBuildMessageTime(msg)
 				err = dc.messageLayer.Send(*msg)
 				if err != nil {
 					klog.Warningf("send message failed with error: %s, operation: %s, resource: %s", err, msg.GetOperation(), msg.GetResource())
@@ -236,6 +240,7 @@ func (dc *DownstreamController) syncEdgeNodes() {
 				}
 				msg := model.NewMessage("").
 					BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.DeleteOperation)
+				metrics.RecordCloudHubBuildMessageTime(msg)
 				err = dc.messageLayer.Send(*msg)
 				if err != nil {
 					klog.Warningf("send message failed with error: %s, operation: %s, resource: %s", err, msg.GetOperation(), msg.GetResource())
@@ -273,6 +278,7 @@ func (dc *DownstreamController) syncRule() {
 			msg := model.NewMessage("").
 				SetResourceVersion(rule.ResourceVersion).
 				FillBody(rule)
+			metrics.RecordCloudHubBuildMessageTime(msg)
 			switch e.Type {
 			case watch.Added:
 				msg.BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.InsertOperation)
@@ -317,6 +323,7 @@ func (dc *DownstreamController) syncRuleEndpoint() {
 			msg := model.NewMessage("").
 				SetResourceVersion(ruleEndpoint.ResourceVersion).
 				FillBody(ruleEndpoint)
+			metrics.RecordCloudHubBuildMessageTime(msg)
 			switch e.Type {
 			case watch.Added:
 				msg.BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, resource, model.InsertOperation)

@@ -7,6 +7,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
@@ -19,6 +20,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/dynamiccontroller/application"
 	edgeconst "github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/constants"
 	edgemessagelayer "github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/messagelayer"
+	"github.com/kubeedge/kubeedge/cloud/pkg/metrics"
 	"github.com/kubeedge/kubeedge/cloud/pkg/synccontroller"
 	commonconst "github.com/kubeedge/kubeedge/common/constants"
 )
@@ -41,6 +43,23 @@ func NewChannelMessageQueue(objectSyncLister reliablesyncslisters.ObjectSyncList
 		objectSyncLister:        objectSyncLister,
 		clusterObjectSyncLister: clusterObjectSyncLister,
 	}
+}
+
+func (q *ChannelMessageQueue) StartMetrics() {
+	utilwait.Until(func() {
+		q.queuePool.Range(func(key, value interface{}) bool {
+			nodeID := key.(string)
+			queue := value.(workqueue.RateLimitingInterface)
+			metrics.RecordCloudHubNodeQueue(nodeID, queue.Len())
+			return true
+		})
+		q.listQueuePool.Range(func(key, value interface{}) bool {
+			nodeID := key.(string)
+			queue := value.(workqueue.RateLimitingInterface)
+			metrics.RecordCloudHubNodeListQueue(nodeID, queue.Len())
+			return true
+		})
+	}, 30, utilwait.NeverStop)
 }
 
 // DispatchMessage gets the message from the cloud, extracts the
