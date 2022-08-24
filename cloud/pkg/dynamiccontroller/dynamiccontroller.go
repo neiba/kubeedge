@@ -94,6 +94,6 @@ func (dctl *DynamicController) receiveMessage() {
 			klog.Warningf("receive message failed, %s", err)
 			continue
 		}
-		dctl.applicationCenter.Process(msg)
+		go dctl.applicationCenter.Process(msg)
 	}
 }
