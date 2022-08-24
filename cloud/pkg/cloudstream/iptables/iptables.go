@@ -78,6 +78,8 @@ func NewIptablesManager(stream *v1alpha1.CloudStream) *Manager {
 }
 
 func (im *Manager) Run() {
+	beehiveContext.InitContext(beehiveContext.MsgCtxTypeChannel)
+
 	if !cache.WaitForCacheSync(beehiveContext.Done(), im.cmListerSynced) {
 		klog.Error("unable to sync caches for iptables manager")
 		return
