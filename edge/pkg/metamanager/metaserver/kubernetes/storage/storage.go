@@ -3,6 +3,9 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
@@ -129,6 +132,21 @@ func (r *REST) List(ctx context.Context, options *metainternalversion.ListOption
 		klog.Infof("[metaserver/reststorage] successfully process list req (%v) through cloud", path)
 		return list, nil
 	}()
+
+	if err != nil && strings.Contains(err.Error(), "Too large resource version") {
+		return nil, &errors.StatusError{ErrStatus: metav1.Status{
+			Status: metav1.StatusFailure,
+			Code:   http.StatusInternalServerError,
+			Reason: metav1.StatusReasonInternalError,
+			Details: &metav1.StatusDetails{
+				Causes: []metav1.StatusCause{{
+					Message: err.Error(),
+					Type:    metav1.CauseTypeResourceVersionTooLarge,
+				}},
+			},
+			Message: fmt.Sprintf("Internal error occurred: %v", err),
+		}}
+	}
 
 	// try local if error occurs
 	if err != nil {

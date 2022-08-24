@@ -328,7 +328,7 @@ func (a *Agent) doApply(app *Application) {
 	app.Status = InApplying
 	msg := model.NewMessage("").SetRoute(MetaServerSource, modules.DynamicControllerModuleGroup).FillBody(app)
 	msg.SetResourceOperation("null", "null")
-	resp, err := beehiveContext.SendSync(edgehub.ModuleNameEdgeHub, *msg, 10*time.Second)
+	resp, err := beehiveContext.SendSync(edgehub.ModuleNameEdgeHub, *msg, 60*time.Second)
 	if err != nil {
 		app.Status = Failed
 		app.Reason = fmt.Sprintf("failed to access cloud Application center: %v", err)
