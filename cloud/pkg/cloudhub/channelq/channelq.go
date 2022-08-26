@@ -102,7 +102,7 @@ func (q *ChannelMessageQueue) addMessageToQueue(nodeID string, msg *beehiveModel
 
 	//if the operation is delete, force to sync the resource message
 	//if the operation is response, force to sync the resource message, since the edgecore requests it
-	if !isDeleteMessage(msg) && msg.GetOperation() != beehiveModel.ResponseOperation {
+	if !isDeleteMessage(msg) && msg.GetOperation() != beehiveModel.ResponseOperation && msg.Router.Source != modules.DynamicControllerModuleName {
 		resourceNamespace, _ := edgemessagelayer.GetNamespace(*msg)
 		resourceUID, err := GetMessageUID(*msg)
 		if err != nil {
