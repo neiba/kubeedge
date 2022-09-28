@@ -95,6 +95,7 @@ type UpstreamController struct {
 	config v1alpha1.EdgeController
 
 	TunnelPort int
+	RouterURL  string
 
 	// message channel
 	nodeStatusChan            chan model.Message
@@ -394,6 +395,10 @@ func (uc *UpstreamController) updatePodStatus() {
 func (uc *UpstreamController) createNode(name string, node *v1.Node) (*v1.Node, error) {
 	node.Name = name
 	node.Status.DaemonEndpoints.KubeletEndpoint.Port = int32(uc.TunnelPort)
+	if node.Annotations == nil {
+		node.Annotations = make(map[string]string)
+	}
+	node.Annotations[modules.RouterURLAnnotationKey] = uc.RouterURL
 	return uc.kubeClient.CoreV1().Nodes().Create(context.Background(), node, metaV1.CreateOptions{})
 }
 
@@ -510,6 +515,8 @@ func (uc *UpstreamController) updateNodeStatus() {
 					}
 					getNode.Annotations[string(name)] = string(data)
 				}
+
+				getNode.Annotations[modules.RouterURLAnnotationKey] = uc.RouterURL
 
 				// Keep the same "VolumesAttached" attribute with upstream,
 				// since this value is maintained by kube-controller-manager.

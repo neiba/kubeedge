@@ -5,21 +5,28 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 
+	"github.com/kubeedge/kubeedge/cloud/pkg/common/informers"
+	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
 	routerConfig "github.com/kubeedge/kubeedge/cloud/pkg/router/config"
 	"github.com/kubeedge/kubeedge/cloud/pkg/router/utils"
+	"github.com/kubeedge/kubeedge/pkg/util"
 )
 
 const MaxMessageBytes = 12 * (1 << 20)
 
 var (
 	RestHandlerInstance = &RestHandler{}
+	routerURL           string
 )
 
 type RestHandler struct {
@@ -27,6 +34,8 @@ type RestHandler struct {
 	handlers    sync.Map
 	port        int
 	bindAddress string
+
+	nodeLister corelisters.NodeLister
 }
 
 func InitHandler() {
@@ -40,6 +49,14 @@ func InitHandler() {
 	if RestHandlerInstance.port <= 0 {
 		RestHandlerInstance.port = 9443
 	}
+	RestHandlerInstance.nodeLister = informers.GetInformersManager().GetK8sInformerFactory().Core().V1().Nodes().Lister()
+
+	routerAddr := routerConfig.Config.Address
+	if routerAddr == "0.0.0.0" {
+		hostnameOverride := util.GetHostname()
+		routerAddr, _ = util.GetLocalIP(hostnameOverride)
+	}
+	routerURL = fmt.Sprintf("http://%s:%d", routerAddr, routerConfig.Config.Port)
 	klog.Infof("rest init: %v", RestHandlerInstance)
 }
 
@@ -115,6 +132,20 @@ func (rh *RestHandler) httpHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	node, err := rh.nodeLister.Get(uriSections[1])
+	if err != nil || node.Annotations == nil || node.Annotations[modules.RouterURLAnnotationKey] == "" {
+		w.WriteHeader(http.StatusNotFound)
+		_, err = w.Write([]byte("No rule match"))
+		klog.Infof("no rule match, write result: %v", err)
+		return
+	}
+
+	if node.Annotations[modules.RouterURLAnnotationKey] != routerURL {
+		serveReverseProxy(node.Annotations[modules.RouterURLAnnotationKey], w, r)
+		return
+	}
+
 	v, ok := rh.handlers.Load(matchPath)
 	if !ok {
 		klog.Warningf("No matched handler for path: %s", matchPath)
@@ -136,45 +167,39 @@ func (rh *RestHandler) httpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isNodeName(uriSections[1]) {
-		params := make(map[string]interface{})
-		msgID := uuid.New().String()
-		params["messageID"] = msgID
-		params["request"] = r
-		params["timeout"] = rh.restTimeout
-		params["data"] = b
+	params := make(map[string]interface{})
+	msgID := uuid.New().String()
+	params["messageID"] = msgID
+	params["request"] = r
+	params["timeout"] = rh.restTimeout
+	params["data"] = b
 
-		v, err := handle(params)
-		if err != nil {
-			klog.Errorf("handle request error, msg id: %s, err: %v", msgID, err)
-			return
-		}
-		response, ok := v.(*http.Response)
-		if !ok {
-			klog.Errorf("response convert error, msg id: %s, reason: %v", msgID, err)
-			return
-		}
-		body, err := ioutil.ReadAll(io.LimitReader(response.Body, MaxMessageBytes))
-		if err != nil {
-			klog.Errorf("response body read error, msg id: %s, reason: %v", msgID, err)
-			return
-		}
-		for key, values := range response.Header {
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
-		}
-		w.WriteHeader(response.StatusCode)
-		if _, err = w.Write(body); err != nil {
-			klog.Errorf("response body write error, msg id: %s, reason: %v", msgID, err)
-			return
-		}
-		klog.Infof("response to client, msg id: %s, write result: success", msgID)
-	} else {
-		w.WriteHeader(http.StatusNotFound)
-		_, err = w.Write([]byte("No rule match"))
-		klog.Infof("no rule match, write result: %v", err)
+	resp, err := handle(params)
+	if err != nil {
+		klog.Errorf("handle request error, msg id: %s, err: %v", msgID, err)
+		return
 	}
+	response, ok := resp.(*http.Response)
+	if !ok {
+		klog.Errorf("response convert error, msg id: %s, reason: %v", msgID, err)
+		return
+	}
+	body, err := ioutil.ReadAll(io.LimitReader(response.Body, MaxMessageBytes))
+	if err != nil {
+		klog.Errorf("response body read error, msg id: %s, reason: %v", msgID, err)
+		return
+	}
+	for key, values := range response.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(response.StatusCode)
+	if _, err = w.Write(body); err != nil {
+		klog.Errorf("response body write error, msg id: %s, reason: %v", msgID, err)
+		return
+	}
+	klog.Infof("response to client, msg id: %s, write result: success", msgID)
 }
 
 func (rh *RestHandler) IsMatch(key interface{}, message interface{}) bool {
@@ -189,7 +214,20 @@ func (rh *RestHandler) IsMatch(key interface{}, message interface{}) bool {
 	return utils.IsMatch(res, uri)
 }
 
-// TODO: check node name
-func isNodeName(str string) bool {
-	return true
+// Serve a reverse proxy for a given url
+func serveReverseProxy(target string, res http.ResponseWriter, req *http.Request) {
+	// parse the url
+	url, _ := url.Parse(target)
+
+	// create the reverse proxy
+	proxy := httputil.NewSingleHostReverseProxy(url)
+
+	// Update the headers to allow for SSL redirection
+	req.URL.Host = url.Host
+	req.URL.Scheme = url.Scheme
+	req.Header.Set("X-Forwarded-Host", req.Header.Get("Host"))
+	req.Host = url.Host
+
+	// Note that ServeHttp is non blocking and uses a go routine under the hood
+	proxy.ServeHTTP(res, req)
 }
