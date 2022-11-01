@@ -23,6 +23,7 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/kubeedge/kubeedge/common/constants"
 	"k8s.io/klog/v2"
 )
 
@@ -89,7 +90,7 @@ func ReadMessageFromTunnel(r io.Reader) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := ioutil.ReadAll(buf)
+	data, err := ioutil.ReadAll(io.LimitReader(buf, constants.MaxRespBodyLength))
 	if err != nil {
 		return nil, err
 	}

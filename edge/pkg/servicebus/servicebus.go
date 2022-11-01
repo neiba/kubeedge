@@ -3,6 +3,7 @@ package servicebus
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -133,8 +134,7 @@ func processMessage(msg *model.Message) {
 		}
 		return
 	}
-	resp.Body = http.MaxBytesReader(nil, resp.Body, maxBodySize)
-	resBody, err := ioutil.ReadAll(resp.Body)
+	resBody, err := ioutil.ReadAll(io.LimitReader(resp.Body, maxBodySize))
 	if err != nil {
 		if err.Error() == "http: request body too large" {
 			err = fmt.Errorf("response body too large")
