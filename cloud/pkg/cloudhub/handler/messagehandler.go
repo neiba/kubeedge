@@ -19,11 +19,13 @@ import (
 	beehiveModel "github.com/kubeedge/beehive/pkg/core/model"
 	"github.com/kubeedge/kubeedge/cloud/pkg/apis/reliablesyncs/v1alpha1"
 	crdClientset "github.com/kubeedge/kubeedge/cloud/pkg/client/clientset/versioned"
+	reliablesyncslisters "github.com/kubeedge/kubeedge/cloud/pkg/client/listers/reliablesyncs/v1alpha1"
 	"github.com/kubeedge/kubeedge/cloud/pkg/cloudhub/channelq"
 	hubio "github.com/kubeedge/kubeedge/cloud/pkg/cloudhub/common/io"
 	"github.com/kubeedge/kubeedge/cloud/pkg/cloudhub/common/model"
 	hubconfig "github.com/kubeedge/kubeedge/cloud/pkg/cloudhub/config"
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/client"
+	"github.com/kubeedge/kubeedge/cloud/pkg/common/informers"
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
 	deviceconst "github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/constants"
 	edgeconst "github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/constants"
@@ -70,6 +72,7 @@ type MessageHandle struct {
 	KeepaliveChannel  sync.Map
 	MessageAcks       sync.Map
 	crdClient         crdClientset.Interface
+	objectSyncLister  reliablesyncslisters.ObjectSyncLister
 }
 
 type HandleFunc func(info *model.HubInfo, exitServe chan ExitCode)
@@ -88,6 +91,7 @@ func InitHandler(eventq *channelq.ChannelMessageQueue) {
 			MessageQueue:      eventq,
 			NodeLimit:         hubconfig.Config.NodeLimit,
 			crdClient:         client.GetCRDClient(),
+			objectSyncLister:  informers.GetInformersManager().GetCRDInformerFactory().Reliablesyncs().V1alpha1().ObjectSyncs().Lister(),
 		}
 
 		CloudhubHandler.Handlers = []HandleFunc{
@@ -479,6 +483,7 @@ func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan Ex
 func (mh *MessageHandle) sendMsg(hi hubio.CloudHubIO, info *model.HubInfo, copyMsg, msg *beehiveModel.Message, nodeStore cache.Store) error {
 	ackChan := make(chan struct{})
 	mh.MessageAcks.Store(copyMsg.GetID(), ackChan)
+	mh.createSuccessPoint(msg, info)
 
 	// initialize timer and retry count for sending message
 	var (
@@ -520,6 +525,54 @@ func (mh *MessageHandle) send(hi hubio.CloudHubIO, info *model.HubInfo, msg *bee
 	return nil
 }
 
+func (mh *MessageHandle) createSuccessPoint(msg *beehiveModel.Message, info *model.HubInfo) {
+	if msg.GetGroup() == edgeconst.GroupResource {
+		resourceNamespace, _ := edgemessagelayer.GetNamespace(*msg)
+		resourceName, _ := edgemessagelayer.GetResourceName(*msg)
+		resourceUID, err := channelq.GetMessageUID(*msg)
+		if err != nil {
+			klog.Errorf("failed to get message UID %v, err: %v", msg, err)
+			return
+		}
+
+		objectSyncName := synccontroller.BuildObjectSyncName(info.NodeID, resourceUID)
+
+		_, err = mh.objectSyncLister.ObjectSyncs(resourceNamespace).Get(objectSyncName)
+		if err != nil && apierrors.IsNotFound(err) {
+			objectSync := &v1alpha1.ObjectSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: objectSyncName,
+				},
+				Spec: v1alpha1.ObjectSyncSpec{
+					ObjectAPIVersion: util.GetMessageAPIVerison(msg),
+					ObjectKind:       util.GetMessageResourceType(msg),
+					ObjectName:       resourceName,
+				},
+			}
+			if objectSync.Spec.ObjectKind == "" {
+				klog.Errorf("Failed to init objectSync: %s, ObjectKind is empty, msg content: %v", objectSyncName, msg.GetContent())
+				return
+			}
+			_, err := mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).Create(context.Background(), objectSync, metav1.CreateOptions{})
+			if err != nil {
+				klog.Errorf("Failed to create objectSync: %s, err: %v", objectSyncName, err)
+				return
+			}
+			objectSyncStatus, err := mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).Get(context.Background(), objectSyncName, metav1.GetOptions{})
+			if err != nil {
+				klog.Errorf("Failed to get objectSync: %s, err: %v", objectSyncName, err)
+				return
+			}
+			objectSyncStatus.Status.ObjectResourceVersion = "0"
+			if _, err := mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).UpdateStatus(context.Background(), objectSyncStatus, metav1.UpdateOptions{}); err != nil {
+				klog.Errorf("Failed to update objectSync: %s, err: %v", objectSyncName, err)
+				return
+			}
+			klog.V(4).Infof("createSuccessPoint successfully for message: %s", msg.GetResource())
+		}
+	}
+}
+
 func (mh *MessageHandle) saveSuccessPoint(msg *beehiveModel.Message, info *model.HubInfo, nodeStore cache.Store) {
 	if msg.GetGroup() == edgeconst.GroupResource {
 		resourceNamespace, _ := edgemessagelayer.GetNamespace(*msg)
@@ -542,50 +595,22 @@ func (mh *MessageHandle) saveSuccessPoint(msg *beehiveModel.Message, info *model
 			return
 		}
 
-		objectSync, err := mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).Get(context.Background(), objectSyncName, metav1.GetOptions{})
+		objectSync, err := mh.objectSyncLister.ObjectSyncs(resourceNamespace).Get(objectSyncName)
 		if err == nil {
 			objectSync.Status.ObjectResourceVersion = msg.GetResourceVersion()
-			_, err := mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).UpdateStatus(context.Background(), objectSync, metav1.UpdateOptions{})
-			if err != nil {
-				klog.Errorf("Failed to update objectSync: %v, resourceType: %s, resourceNamespace: %s, resourceName: %s",
-					err, resourceType, resourceNamespace, resourceName)
-			}
-		} else if err != nil && apierrors.IsNotFound(err) {
-			objectSync := &v1alpha1.ObjectSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: objectSyncName,
-				},
-				Spec: v1alpha1.ObjectSyncSpec{
-					ObjectAPIVersion: util.GetMessageAPIVerison(msg),
-					ObjectKind:       util.GetMessageResourceType(msg),
-					ObjectName:       resourceName,
-				},
-			}
-			if objectSync.Spec.ObjectKind == "" {
-				klog.Errorf("Failed to init objectSync: %s, ObjectKind is empty, msg content: %v", objectSyncName, msg.GetContent())
-				return
-			}
-			_, err := mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).Create(context.Background(), objectSync, metav1.CreateOptions{})
-			if err != nil {
-				klog.Errorf("Failed to create objectSync: %s, err: %v", objectSyncName, err)
-				return
-			}
-
-			objectSyncStatus, err := mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).Get(context.Background(), objectSyncName, metav1.GetOptions{})
-			if err != nil {
-				klog.Errorf("Failed to get objectSync: %s, err: %v", objectSyncName, err)
-			}
-			objectSyncStatus.Status.ObjectResourceVersion = msg.GetResourceVersion()
-			if _, err := mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).UpdateStatus(context.Background(), objectSyncStatus, metav1.UpdateOptions{}); err != nil {
-				klog.Errorf("Failed to update objectSync: %s, err: %v", objectSyncName, err)
-			}
+			_, err = mh.crdClient.ReliablesyncsV1alpha1().ObjectSyncs(resourceNamespace).UpdateStatus(context.Background(), objectSync, metav1.UpdateOptions{})
+		}
+		if err != nil {
+			klog.Errorf("Failed to update objectSync: %v, resourceType: %s, resourceNamespace: %s, resourceName: %s",
+				err, resourceType, resourceNamespace, resourceName)
+		} else {
+			klog.V(4).Infof("saveSuccessPoint successfully for message: %s", msg.GetResource())
 		}
 	}
 
 	// TODO: save device info
 	if msg.GetGroup() == deviceconst.GroupTwin {
 	}
-	klog.V(4).Infof("saveSuccessPoint successfully for message: %s", msg.GetResource())
 }
 
 func (mh *MessageHandle) deleteSuccessPoint(resourceNamespace, objectSyncName string) {
