@@ -100,7 +100,7 @@ type CommonResourceEventHandler struct {
 	informer     informers.GenericInformer
 
 	// mux for listeners
-	mux sync.Mutex
+	mux sync.RWMutex
 }
 
 func NewCommonResourceEventHandler(gvr schema.GroupVersionResource, informerFactory dynamicinformer.DynamicSharedInformerFactory, layer messagelayer.MessageLayer) *CommonResourceEventHandler {
@@ -109,7 +109,7 @@ func NewCommonResourceEventHandler(gvr schema.GroupVersionResource, informerFact
 		listeners:    make(map[string]*SelectorListener),
 		messageLayer: layer,
 		gvr:          gvr,
-		mux:          sync.Mutex{},
+		mux:          sync.RWMutex{},
 	}
 
 	klog.Infof("[metaserver/resourceEventHandler] handler(%v) init, prepare informer...", gvr)
@@ -160,9 +160,15 @@ func (c *CommonResourceEventHandler) AddListener(s *SelectorListener) error {
 		return fmt.Errorf("failed to list: %v", err)
 	}
 	s.sendAllObjects(ret, c.messageLayer)
-	c.mux.Lock()
-	c.listeners[s.id] = s
-	c.mux.Unlock()
+
+	c.mux.RLock()
+	_, ok := c.listeners[s.id]
+	c.mux.RUnlock()
+	if !ok {
+		c.mux.Lock()
+		c.listeners[s.id] = s
+		c.mux.Unlock()
+	}
 	return nil
 }
 
@@ -175,11 +181,11 @@ func (c *CommonResourceEventHandler) DeleteListener(s *SelectorListener) {
 func (c *CommonResourceEventHandler) dispatchEvents() {
 	for event := range c.events {
 		klog.V(4).Infof("[metaserver/resourceEventHandler] handler(%v), send obj event{%v/%v} to listeners", c.gvr, event.Type, event.Object.GetObjectKind().GroupVersionKind().String())
-		c.mux.Lock()
+		c.mux.RLock()
 		for _, listener := range c.listeners {
 			listener.sendObj(event, c.messageLayer)
 		}
-		c.mux.Unlock()
+		c.mux.RUnlock()
 	}
 	klog.Warningf("[metaserver/resourceEventHandler] handler(%v) stopped!", c.gvr.String())
 }
