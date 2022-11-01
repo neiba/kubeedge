@@ -126,6 +126,10 @@ func (ctx *ChannelContext) SendSync(module string, message model.Message, timeou
 	ctx.anonChannels[anonName] = anonChan
 	ctx.anonChsLock.Unlock()
 	defer func() {
+		go func() {
+			for range anonChan {
+			}
+		}()
 		ctx.anonChsLock.Lock()
 		delete(ctx.anonChannels, anonName)
 		close(anonChan)
