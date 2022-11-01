@@ -28,4 +28,6 @@ const (
 	TunnelPort      string = "tunnelport"
 
 	TunnelPortRecordAnnotationKey string = "tunnelportrecord.kubeedge.io"
+
+	RouterURLAnnotationKey string = "routerurl.kubeedge.io"
 )

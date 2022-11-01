@@ -1,6 +1,8 @@
 package edgecontroller
 
 import (
+	"fmt"
+
 	"k8s.io/klog/v2"
 
 	"github.com/kubeedge/beehive/pkg/core"
@@ -8,6 +10,7 @@ import (
 	"github.com/kubeedge/kubeedge/cloud/pkg/common/modules"
 	"github.com/kubeedge/kubeedge/cloud/pkg/edgecontroller/controller"
 	"github.com/kubeedge/kubeedge/pkg/apis/componentconfig/cloudcore/v1alpha1"
+	"github.com/kubeedge/kubeedge/pkg/util"
 )
 
 // EdgeController use beehive context message layer
@@ -17,7 +20,7 @@ type EdgeController struct {
 	downstream *controller.DownstreamController
 }
 
-func newEdgeController(config *v1alpha1.EdgeController, tunnelPort int) *EdgeController {
+func newEdgeController(config *v1alpha1.EdgeController, tunnelPort int, router *v1alpha1.Router) *EdgeController {
 	ec := &EdgeController{config: *config}
 	if !ec.Enable() {
 		return ec
@@ -29,6 +32,13 @@ func newEdgeController(config *v1alpha1.EdgeController, tunnelPort int) *EdgeCon
 	}
 	ec.upstream.TunnelPort = tunnelPort
 
+	routerAddr := router.Address
+	if routerAddr == "0.0.0.0" {
+		hostnameOverride := util.GetHostname()
+		routerAddr, _ = util.GetLocalIP(hostnameOverride)
+	}
+	ec.upstream.RouterURL = fmt.Sprintf("http://%s:%d", routerAddr, router.Port)
+
 	ec.downstream, err = controller.NewDownstreamController(config, informers.GetInformersManager().GetK8sInformerFactory(), informers.GetInformersManager(), informers.GetInformersManager().GetCRDInformerFactory())
 	if err != nil {
 		klog.Fatalf("new downstream controller failed with error: %s", err)
@@ -36,8 +46,8 @@ func newEdgeController(config *v1alpha1.EdgeController, tunnelPort int) *EdgeCon
 	return ec
 }
 
-func Register(ec *v1alpha1.EdgeController, commonConfig *v1alpha1.CommonConfig) {
-	core.Register(newEdgeController(ec, commonConfig.TunnelPort))
+func Register(ec *v1alpha1.EdgeController, commonConfig *v1alpha1.CommonConfig, router *v1alpha1.Router) {
+	core.Register(newEdgeController(ec, commonConfig.TunnelPort, router))
 }
 
 // Name of controller
