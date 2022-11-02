@@ -74,8 +74,11 @@ func (q *ChannelMessageQueue) DispatchMessage() {
 }
 
 func (q *ChannelMessageQueue) addListMessageToQueue(nodeID string, msg *beehiveModel.Message) {
-	nodeListQueue := q.GetNodeListQueue(nodeID)
-	nodeListStore := q.GetNodeListStore(nodeID)
+	nodeListQueue := q.GetNodeListQueue(nodeID, false)
+	nodeListStore := q.GetNodeListStore(nodeID, false)
+	if nodeListQueue == nil || nodeListStore == nil {
+		return
+	}
 
 	messageKey, _ := getListMsgKey(msg)
 
@@ -91,8 +94,11 @@ func (q *ChannelMessageQueue) addMessageToQueue(nodeID string, msg *beehiveModel
 		return
 	}
 
-	nodeQueue := q.GetNodeQueue(nodeID)
-	nodeStore := q.GetNodeStore(nodeID)
+	nodeQueue := q.GetNodeQueue(nodeID, false)
+	nodeStore := q.GetNodeStore(nodeID, false)
+	if nodeQueue == nil || nodeStore == nil {
+		return
+	}
 
 	messageKey, err := getMsgKey(msg)
 	if err != nil {
@@ -274,9 +280,12 @@ func (q *ChannelMessageQueue) Publish(msg *beehiveModel.Message) error {
 }
 
 // GetNodeQueue returns the queue for given node
-func (q *ChannelMessageQueue) GetNodeQueue(nodeID string) workqueue.RateLimitingInterface {
+func (q *ChannelMessageQueue) GetNodeQueue(nodeID string, create bool) workqueue.RateLimitingInterface {
 	queue, ok := q.queuePool.Load(nodeID)
 	if !ok {
+		if !create {
+			return nil
+		}
 		klog.Warningf("nodeQueue for edge node %s not found and created now", nodeID)
 		nodeQueue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), nodeID)
 		q.queuePool.Store(nodeID, nodeQueue)
@@ -288,9 +297,12 @@ func (q *ChannelMessageQueue) GetNodeQueue(nodeID string) workqueue.RateLimiting
 }
 
 // GetNodeListQueue returns the listQueue for given node
-func (q *ChannelMessageQueue) GetNodeListQueue(nodeID string) workqueue.RateLimitingInterface {
+func (q *ChannelMessageQueue) GetNodeListQueue(nodeID string, create bool) workqueue.RateLimitingInterface {
 	queue, ok := q.listQueuePool.Load(nodeID)
 	if !ok {
+		if !create {
+			return nil
+		}
 		klog.Warningf("nodeListQueue for edge node %s not found and created now", nodeID)
 		nodeListQueue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), nodeID)
 		q.listQueuePool.Store(nodeID, nodeListQueue)
@@ -302,9 +314,12 @@ func (q *ChannelMessageQueue) GetNodeListQueue(nodeID string) workqueue.RateLimi
 }
 
 // GetNodeStore returns the store for given node
-func (q *ChannelMessageQueue) GetNodeStore(nodeID string) cache.Store {
+func (q *ChannelMessageQueue) GetNodeStore(nodeID string, create bool) cache.Store {
 	store, ok := q.storePool.Load(nodeID)
 	if !ok {
+		if !create {
+			return nil
+		}
 		klog.Warningf("nodeStore for edge node %s not found and created now", nodeID)
 		nodeStore := cache.NewStore(getMsgKey)
 		q.storePool.Store(nodeID, nodeStore)
@@ -316,9 +331,12 @@ func (q *ChannelMessageQueue) GetNodeStore(nodeID string) cache.Store {
 }
 
 // GetNodeListStore returns the listStore for given node
-func (q *ChannelMessageQueue) GetNodeListStore(nodeID string) cache.Store {
+func (q *ChannelMessageQueue) GetNodeListStore(nodeID string, create bool) cache.Store {
 	store, ok := q.listStorePool.Load(nodeID)
 	if !ok {
+		if !create {
+			return nil
+		}
 		klog.Warningf("nodeListStore for edge node %s not found and created now", nodeID)
 		nodeListStore := cache.NewStore(getListMsgKey)
 		q.listStorePool.Store(nodeID, nodeListStore)

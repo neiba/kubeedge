@@ -211,6 +211,7 @@ func (mh *MessageHandle) KeepaliveCheckLoop(info *model.HubInfo, stopServe chan 
 				klog.Warningf("Timeout to receive heart beat from edge node %s for project %s", info.NodeID, info.ProjectID)
 				conn.(hubio.CloudHubIO).Close()
 				mh.nodeConns.Delete(info.NodeID)
+				mh.MessageQueue.Close(info)
 			}
 		}
 	}
@@ -364,9 +365,9 @@ func (mh *MessageHandle) UnregisterNode(info *model.HubInfo, code ExitCode) {
 
 // ListMessageWriteLoop processes all list type resource write requests
 func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe chan ExitCode) {
-	nodeListQueue := mh.MessageQueue.GetNodeListQueue(info.NodeID)
-	nodeListStore := mh.MessageQueue.GetNodeListStore(info.NodeID)
-	nodeQueue := mh.MessageQueue.GetNodeQueue(info.NodeID)
+	nodeListQueue := mh.MessageQueue.GetNodeListQueue(info.NodeID, true)
+	nodeListStore := mh.MessageQueue.GetNodeListStore(info.NodeID, true)
+	nodeQueue := mh.MessageQueue.GetNodeQueue(info.NodeID, true)
 
 	for {
 		key, quit := nodeListQueue.Get()
@@ -421,8 +422,8 @@ func (mh *MessageHandle) ListMessageWriteLoop(info *model.HubInfo, stopServe cha
 
 // MessageWriteLoop processes all write requests
 func (mh *MessageHandle) MessageWriteLoop(info *model.HubInfo, stopServe chan ExitCode) {
-	nodeQueue := mh.MessageQueue.GetNodeQueue(info.NodeID)
-	nodeStore := mh.MessageQueue.GetNodeStore(info.NodeID)
+	nodeQueue := mh.MessageQueue.GetNodeQueue(info.NodeID, true)
+	nodeStore := mh.MessageQueue.GetNodeStore(info.NodeID, true)
 
 	for {
 		key, quit := nodeQueue.Get()
